@@ -1,0 +1,28 @@
+# Alternative to Fly.io: a $5 VPS (DigitalOcean/Hetzner) with systemd.
+#
+#   sudo useradd -r -s /usr/sbin/nologin cmb
+#   sudo mkdir -p /opt/congress-mirror-bot /var/lib/congress-mirror-bot
+#   # copy the repo to /opt/congress-mirror-bot, create a venv there:
+#   python3.12 -m venv /opt/congress-mirror-bot/.venv
+#   /opt/congress-mirror-bot/.venv/bin/pip install /opt/congress-mirror-bot
+#   # put real secrets in /etc/congress-mirror-bot.env (chmod 600, root:cmb)
+#   sudo cp deploy/congress-mirror-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now congress-mirror-bot
+#
+[Unit]
+Description=Congressional Trade Mirror Bot (paper-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cmb
+EnvironmentFile=/etc/congress-mirror-bot.env
+Environment=STATE_DB_PATH=/var/lib/congress-mirror-bot/state.db
+ExecStart=/opt/congress-mirror-bot/.venv/bin/congress-bot serve
+Restart=always
+RestartSec=10
+StateDirectory=congress-mirror-bot
+
+[Install]
+WantedBy=multi-user.target

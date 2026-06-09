@@ -1,0 +1,32 @@
+[project]
+name = "congress-mirror-bot"
+version = "0.1.0"
+description = "Mirror congressional stock disclosures into an Alpaca paper account (for-interest, paper-only)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alpaca-py>=0.21",
+    "httpx>=0.27",
+    "pandas>=2.1",
+    "APScheduler>=3.10",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+congress-bot = "congress_bot.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
