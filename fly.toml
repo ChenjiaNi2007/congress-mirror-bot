@@ -4,7 +4,7 @@
 #   fly volumes create cmb_data --size 1 --region <region>
 #   fly secrets set ALPACA_API_KEY=... ALPACA_SECRET_KEY=... \
 #       ALPACA_BASE_URL=https://paper-api.alpaca.markets \
-#       FMP_API_KEY=... SLACK_WEBHOOK_URL=... DRY_RUN=true
+#       SLACK_WEBHOOK_URL=... DRY_RUN=true
 #   fly deploy
 #
 # Flip DRY_RUN to false (fly secrets set DRY_RUN=false) only after a clean dry-run.

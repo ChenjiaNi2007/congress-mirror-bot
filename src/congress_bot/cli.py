@@ -64,12 +64,23 @@ def run_daily(
     today = today or date.today()
     dry_run = cfg.dry_run if dry_run_override is None else dry_run_override
 
+    # How stale (in seconds) before we bother hitting the network again.
+    # 4 hours covers any back-to-back manual runs; the daily scheduler always
+    # runs once so fresh data is guaranteed in production.
+    _FETCH_TTL_SECONDS = 4 * 3600
+
     with Store(cfg.state_db_path) as store:
-        # 1. Fetch + dedup.
-        trades = fetch_recent_trades(
-            cfg.lookback_days, fmp_api_key=cfg.fmp_api_key, today=today
-        )
-        new_trades = store.upsert_disclosures(trades)
+        # 1. Fetch + dedup — skip if we already fetched recently.
+        age = store.seconds_since_last_fetch()
+        if age is not None and age < _FETCH_TTL_SECONDS:
+            print(f"Skipping fetch — data is {age/60:.0f}m old (TTL {_FETCH_TTL_SECONDS//3600}h). Using stored trades.")
+            new_trades = []
+        else:
+            trades = fetch_recent_trades(
+                cfg.lookback_days, quiverquant_api_key=cfg.quiverquant_api_key, today=today
+            )
+            new_trades = store.upsert_disclosures(trades)
+            store.mark_fetched()
 
         # 2. Re-rank (monthly, or forced).
         reranked = force_rerank or _rerank_due(store, today)
@@ -104,6 +115,8 @@ def run_daily(
         positions = broker.get_positions()
 
         # 5. Notify.
+        import os
+        _force = os.environ.get("FORCE_ORDERS", "").strip().lower() in {"1", "true", "yes"}
         summary = build_summary(
             today=today,
             leaderboard=leaderboard,
@@ -111,7 +124,7 @@ def run_daily(
             new_disclosures=len(new_trades),
             intents=intents,
             positions=positions,
-            dry_run=dry_run or not broker.is_market_open(),
+            dry_run=dry_run or (not broker.is_market_open() and not _force),
             reranked=reranked,
         )
         send_summary(cfg.slack_webhook_url, summary)
@@ -123,8 +136,9 @@ def run_daily(
 # ──────────────────────────────────────────────────────────────────────────
 def _cmd_backfill(cfg: Config) -> int:
     with Store(cfg.state_db_path) as store:
-        trades = fetch_recent_trades(cfg.lookback_days, fmp_api_key=cfg.fmp_api_key)
+        trades = fetch_recent_trades(cfg.lookback_days, quiverquant_api_key=cfg.quiverquant_api_key)
         new = store.upsert_disclosures(trades)
+        store.mark_fetched()
         print(f"Fetched {len(trades)} trades; {len(new)} new; "
               f"{len(store.all_trades())} total in store.")
     return 0
@@ -135,7 +149,7 @@ def _cmd_rerank(cfg: Config) -> int:
     with Store(cfg.state_db_path) as store:
         if not store.all_trades():
             store.upsert_disclosures(
-                fetch_recent_trades(cfg.lookback_days, fmp_api_key=cfg.fmp_api_key)
+                fetch_recent_trades(cfg.lookback_days, quiverquant_api_key=cfg.quiverquant_api_key)
             )
         leaderboard = run_rerank(cfg, store, prices, asof=date.today())
     print(f"Chosen member: {store_chosen(cfg)}")

@@ -141,6 +141,31 @@ class Store:
     def last_rerank_date(self, d: date) -> None:
         self.set_state("last_rerank_date", d.isoformat())
 
+    def mark_fetched(self) -> None:
+        """Record the current UTC time as the last successful disclosure fetch."""
+        self.set_state("last_fetch_utc", datetime.now(timezone.utc).isoformat())
+
+    def seconds_since_last_fetch(self) -> float | None:
+        """Seconds since the last successful fetch, or None if store is empty.
+
+        Uses the explicit ``last_fetch_utc`` state key when set; falls back to
+        the most recent ``first_seen`` timestamp in the disclosures table so
+        that data fetched before this key existed is still recognised as fresh.
+        """
+        v = self.get_state("last_fetch_utc")
+        if not v:
+            # Fall back to newest first_seen in the disclosures table.
+            with closing(self._conn.cursor()) as cur:
+                cur.execute("SELECT MAX(first_seen) FROM disclosures")
+                row = cur.fetchone()
+                v = row[0] if row else None
+        if not v:
+            return None
+        last = datetime.fromisoformat(v)
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - last).total_seconds()
+
     # ── orders audit log ─────────────────────────────────────────────────────
     def log_order(
         self,
@@ -171,9 +196,14 @@ class Store:
         self._conn.commit()
 
     def order_exists(self, client_order_id: str) -> bool:
+        """True only if a *real* (non-dry) order was already submitted with this ID.
+
+        A dry-run log must never block a subsequent live submission.
+        """
         with closing(self._conn.cursor()) as cur:
             cur.execute(
-                "SELECT 1 FROM orders WHERE client_order_id = ?", (client_order_id,)
+                "SELECT 1 FROM orders WHERE client_order_id = ? AND dry_run = 0",
+                (client_order_id,),
             )
             return cur.fetchone() is not None
 

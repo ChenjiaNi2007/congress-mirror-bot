@@ -23,7 +23,6 @@ class TestNormalizeTicker:
             assert normalize_ticker(bad) is None
 
     def test_drops_long_tokens(self):
-        # 6+ letters is not a US-equity ticker in our model.
         assert normalize_ticker("GOOGLE") is None
 
 
@@ -62,18 +61,25 @@ class TestNormalizeSide:
 
 
 class TestNormalizeRecords:
-    def test_fmp_record(self):
-        recs = [
-            {
-                "representative": "Jane Doe",
-                "ticker": "MSFT",
-                "type": "Purchase",
-                "transactionDate": "2025-01-15",
-                "disclosureDate": "2025-02-20",
-                "amount": "$1,001 - $15,000",
-            }
-        ]
-        trades = normalize_records(recs, source="fmp", chamber="house")
+    def _qv_rec(self, name, ticker, txn_type, txn_date, disc_date, amount,
+                chamber="Representatives", ticker_type="ST"):
+        return {
+            "Representative": name,
+            "House": chamber,
+            "Ticker": ticker,
+            "TickerType": ticker_type,
+            "Transaction": txn_type,
+            "TransactionDate": txn_date,
+            "ReportDate": disc_date,
+            "Range": amount,
+        }
+
+    def test_quiver_quant_record(self):
+        recs = [self._qv_rec(
+            "Jane Doe", "MSFT", "Purchase", "2025-01-15", "2025-02-20",
+            "$1,001 - $15,000"
+        )]
+        trades = normalize_records(recs)
         assert len(trades) == 1
         t = trades[0]
         assert t.member == "Jane Doe"
@@ -84,44 +90,43 @@ class TestNormalizeRecords:
         assert t.disclosure_date == date(2025, 2, 20)
         assert t.amount_mid == 8000.5
 
-    def test_drops_option_and_bond_rows(self):
-        recs = [
-            {"representative": "X", "ticker": "--", "type": "Purchase",
-             "transactionDate": "2025-01-15", "amount": "$1,001 - $15,000"},
-            {"representative": "Y", "ticker": "AAPL 250117C00150000",
-             "type": "Purchase", "transactionDate": "2025-01-15",
-             "amount": "$1,001 - $15,000"},
-            {"representative": "Z", "ticker": "AAPL", "type": "Purchase",
-             "transactionDate": "2025-01-15", "amount": "$1,001 - $15,000"},
-        ]
-        trades = normalize_records(recs, source="fmp", chamber="house")
-        # Only the clean AAPL row survives.
-        assert [t.ticker for t in trades] == ["AAPL"]
-
-    def test_ssw_record(self):
-        recs = [
-            {
-                "senator": "John Roe",
-                "ticker": "NVDA",
-                "type": "Sale (Full)",
-                "transaction_date": "01/15/2025",
-                "disclosure_date": "02/25/2025",
-                "amount": "$15,001 - $50,000",
-            }
-        ]
-        trades = normalize_records(recs, source="ssw")
+    def test_senate_chamber_mapping(self):
+        recs = [self._qv_rec(
+            "John Roe", "NVDA", "Sale (Full)", "2025-01-15", "2025-02-25",
+            "$15,001 - $50,000", chamber="Senate"
+        )]
+        trades = normalize_records(recs)
         assert len(trades) == 1
-        t = trades[0]
-        assert t.chamber == "senate"
-        assert t.side == "sell"
-        assert t.txn_date == date(2025, 1, 15)
+        assert trades[0].chamber == "senate"
+        assert trades[0].side == "sell"
+
+    def test_drops_non_st_ticker_type(self):
+        recs = [
+            self._qv_rec("A", "AAPL", "Purchase", "2025-01-15", "2025-02-15",
+                         "$1,001 - $15,000", ticker_type="OP"),   # option
+            self._qv_rec("B", "MSFT", "Purchase", "2025-01-15", "2025-02-15",
+                         "$1,001 - $15,000", ticker_type="ST"),   # stock
+        ]
+        trades = normalize_records(recs)
+        assert [t.ticker for t in trades] == ["MSFT"]
+
+    def test_drops_invalid_tickers(self):
+        recs = [
+            self._qv_rec("A", "--", "Purchase", "2025-01-15", "2025-02-15",
+                         "$1,001 - $15,000"),
+            self._qv_rec("B", "AAPL 250117C00150000", "Purchase", "2025-01-15",
+                         "2025-02-15", "$1,001 - $15,000"),
+            self._qv_rec("C", "NVDA", "Purchase", "2025-01-15", "2025-02-15",
+                         "$1,001 - $15,000"),
+        ]
+        trades = normalize_records(recs)
+        assert [t.ticker for t in trades] == ["NVDA"]
 
     def test_missing_disclosure_falls_back_to_txn_date(self):
-        recs = [
-            {"representative": "A", "ticker": "TSLA", "type": "Purchase",
-             "transactionDate": "2025-03-01", "amount": "$1,001 - $15,000"},
-        ]
-        t = normalize_records(recs, source="fmp", chamber="house")[0]
+        recs = [self._qv_rec(
+            "A", "TSLA", "Purchase", "2025-03-01", None, "$1,001 - $15,000"
+        )]
+        t = normalize_records(recs)[0]
         assert t.disclosure_date == t.txn_date == date(2025, 3, 1)
 
 

@@ -98,7 +98,9 @@ def reconcile(
     """Plan and (unless dry-run / market closed) submit orders. Returns intents."""
     today = today or date.today()
 
-    if not dry_run and not broker.is_market_open():
+    import os
+    force = os.environ.get("FORCE_ORDERS", "").strip().lower() in {"1", "true", "yes"}
+    if not dry_run and not force and not broker.is_market_open():
         # Plan is still computed for the Slack summary, but nothing is submitted.
         dry_run = True
 

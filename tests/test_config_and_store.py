@@ -10,7 +10,7 @@ from congress_bot.store import Store
 def _cfg(base_url):
     return Config(
         alpaca_api_key="k", alpaca_secret_key="s", alpaca_base_url=base_url,
-        fmp_api_key="f", slack_webhook_url="w", state_db_path="x.db",
+        quiverquant_api_key="q", slack_webhook_url="w", state_db_path="x.db",
         max_positions=15, invested_fraction=0.95, rebalance_band=0.2,
         min_trades=8, min_tickers=4, lookback_days=120, dry_run=True,
     )

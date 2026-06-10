@@ -49,8 +49,8 @@ class Config:
     alpaca_api_key: str
     alpaca_secret_key: str
     alpaca_base_url: str
-    # Data
-    fmp_api_key: str
+    # Data source (Quiver Quantitative — free key at quiverquant.com)
+    quiverquant_api_key: str
     # Slack
     slack_webhook_url: str
     # State
@@ -85,7 +85,7 @@ def load_config(*, dotenv_path: str | None = None) -> Config:
         alpaca_api_key=_require("ALPACA_API_KEY"),
         alpaca_secret_key=_require("ALPACA_SECRET_KEY"),
         alpaca_base_url=_require("ALPACA_BASE_URL"),
-        fmp_api_key=os.environ.get("FMP_API_KEY", "").strip(),
+        quiverquant_api_key=os.environ.get("QUIVERQUANT_API_KEY", "").strip(),
         slack_webhook_url=os.environ.get("SLACK_WEBHOOK_URL", "").strip(),
         state_db_path=os.environ.get("STATE_DB_PATH", "state.db").strip() or "state.db",
         max_positions=_int("MAX_POSITIONS", 15),
